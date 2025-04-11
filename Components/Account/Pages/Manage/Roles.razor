@@ -1,0 +1,47 @@
+﻿@using Microsoft.AspNetCore.Identity;
+@using Microsoft.EntityFrameworkCore;
+@page "/Account/Manage/Roles"
+@rendermode InteractiveServer
+
+<h3>Users</h3>
+
+<EditForm Model="newRole" OnValidSubmit="HandleValidSubmit" FormName="new-role">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div>
+        <label for="roleSelect">Add Role:</label>
+        <InputText id="roleSelect" @bind-Value="newRole" />
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+    </div>
+</EditForm>
+
+
+@foreach (var role in AllRoles)
+{
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">@role.Name</h5>
+            <ul>
+                <button @onclick="() => RemoveRole(role)" class="btn btn-danger btn-sm">Remove</button>
+            </ul>
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromForm]
+    private string newRole { get; set; } = string.Empty;
+
+    [SupplyParameterFromForm]
+    private string roleName { get; set; } = string.Empty;
+
+    private async Task HandleValidSubmit()
+    {
+        if (!string.IsNullOrEmpty(newRole))
+        {
+            await AddRole(newRole);
+            newRole = string.Empty;
+        }
+    }
+}

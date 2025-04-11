@@ -1,0 +1,20 @@
+﻿@using Microsoft.AspNetCore.Authorization
+
+@page "/"
+
+@attribute [Authorize(Policy = "RequireAuthenticatedUser")]
+
+<PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+<AuthorizeView>
+    <Authorized>
+        <p>Du er logget ind!</p>
+    </Authorized>
+    <NotAuthorized>
+        <p>Du er ikke logget ind</p>
+    </NotAuthorized>
+</AuthorizeView>

@@ -1,0 +1,45 @@
+﻿@using Microsoft.AspNetCore.Identity;
+@using Microsoft.EntityFrameworkCore;
+@using Microsoft.AspNetCore.Components.Forms
+@rendermode InteractiveServer
+@page "/Account/Manage/Users"
+
+<h3>Users</h3>
+
+<div>
+    @foreach (var userId in UsersById.Keys)
+    {
+        var user = UsersById[userId];
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">@user.UserName</h5>
+                <p class="card-text">Roles:</p>
+                <ul>
+                    @foreach (var role in UsersRoles[userId])
+                    {
+                        <li>
+                            @role
+                            <button type="button" class="btn btn-danger btn-sm" @onclick="() => RemoveFromRole(userId, role)">Remove</button>
+                        </li>
+                    }
+                </ul>
+
+                <div class="mt-3">
+                    <label for="@($"roleSelect-{userId}")">Add Role:</label>
+                    <InputSelect id="@($"roleSelect-{userId}")" @bind-Value="SelectedRoles[userId]" class="form-select">
+                        <option value="">Select a role</option>
+                        @foreach (var role in Roles.Where(r => !UsersRoles[userId].Contains(r.Name)))
+                        {
+                            <option value="@role.Name">@role.Name</option>
+                        }
+                    </InputSelect>
+                    <button type="button" class="btn btn-primary btn-sm mt-2"
+                            @onclick="() => AddToRole(userId, SelectedRoles[userId])"
+                            disabled="@string.IsNullOrEmpty(SelectedRoles[userId])">
+                        Add
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>

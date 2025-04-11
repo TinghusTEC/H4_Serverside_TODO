@@ -1,0 +1,131 @@
+﻿@page "/todo"
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Services
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+@inject TodoDbContext DbContext
+@inject CprValidationService CprValidationService
+@inject AsymetricEncryption AsymetricEncryption
+
+<AuthorizeView>
+    <Authorized>
+        @if (!CprValidationService.IsCprValidated)
+        {
+            <p>Redirecting to CPR validation...</p>
+        }
+        else
+        {
+            <div>
+                <h4>Your ToDo List</h4>
+                <ul>
+                    @foreach (var item in userToDoItems)
+                    {
+                        <li>
+                            @item.Item
+                            <button @onclick="() => RemoveItem(item.Id)">Remove</button>
+                        </li>
+                    }
+                </ul>
+                <input @bind="newItem" placeholder="Add new item" />
+                <button @onclick="AddItem">Add</button>
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <p>Redirecting to login...</p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<TodoList> userToDoItems = new();
+    private string newItem = string.Empty;
+    private string? username;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserManager.GetUserAsync(SignInManager.Context.User);
+        if (user == null)
+        {
+            NavigationManager.NavigateTo("/Identity/Account/Login", true);
+            return;
+        }
+
+        if (!CprValidationService.IsCprValidated)
+        {
+            NavigationManager.NavigateTo("/cpr", true);
+            return;
+        }
+
+        username = user.UserName;
+
+        // Load ToDo items for the user and decrypt them
+        var encryptedItems = await DbContext.TodoLists
+            .Where(t => t.User != null && t.User.User == username)
+            .ToListAsync();
+
+        userToDoItems = encryptedItems.Select(item => new TodoList
+            {
+                Id = item.Id,
+                UserId = item.UserId,
+                Item = DecryptItem(item.Item)
+            }).ToList();
+    }
+
+    private async Task AddItem()
+    {
+        if (string.IsNullOrWhiteSpace(newItem) || username == null) return;
+
+        var cpr = await DbContext.Cprs.FirstOrDefaultAsync(c => c.User == username);
+        if (cpr == null) return;
+
+        // Encrypt the new item before saving
+        var encryptedItem = EncryptItem(newItem);
+
+        var todoItem = new TodoList
+            {
+                UserId = cpr.Id,
+                Item = encryptedItem
+            };
+
+        DbContext.TodoLists.Add(todoItem);
+        await DbContext.SaveChangesAsync();
+
+        // Add the decrypted item to the UI
+        userToDoItems.Add(new TodoList
+            {
+                Id = todoItem.Id,
+                UserId = todoItem.UserId,
+                Item = newItem
+            });
+
+        newItem = string.Empty;
+    }
+
+    private async Task RemoveItem(int id)
+    {
+        // Retrieve the tracked entity from the DbContext
+        var item = await DbContext.TodoLists.FirstOrDefaultAsync(t => t.Id == id);
+        if (item == null) return;
+
+        // Remove the tracked entity
+        DbContext.TodoLists.Remove(item);
+        await DbContext.SaveChangesAsync();
+
+        // Update the UI
+        userToDoItems.Remove(userToDoItems.First(t => t.Id == id));
+    }
+
+    private string EncryptItem(string plainText)
+    {
+        return AsymetricEncryption.Encrypt(plainText);
+    }
+
+    private string DecryptItem(string encryptedText)
+    {
+        return AsymetricEncryption.Decrypt(encryptedText);
+    }
+}

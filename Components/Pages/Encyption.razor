@@ -1,0 +1,40 @@
+﻿@page "/encryption"
+@using TodoApp.Services
+
+@inject EncryptionService EncryptionService
+
+<h3>Encryption Demo</h3>
+
+<div>
+    <label>Enter Text to Encrypt:</label>
+    <input @bind="inputText" placeholder="Enter text" />
+    <button @onclick="EncryptText">Encrypt</button>
+</div>
+
+@if (!string.IsNullOrEmpty(encryptedText))
+{
+    <div>
+        <h4>Encrypted Text:</h4>
+        <p>@encryptedText</p>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(decryptedText))
+{
+    <div>
+        <h4>Decrypted Text:</h4>
+        <p>@decryptedText</p>
+    </div>
+}
+
+@code {
+    private string inputText = string.Empty;
+    private string encryptedText = string.Empty;
+    private string decryptedText = string.Empty;
+
+    private async Task EncryptText()
+    {
+        encryptedText = await EncryptionService.EncryptViaWebApiAsync(inputText);
+        decryptedText = EncryptionService.Decrypt(encryptedText);
+    }
+}

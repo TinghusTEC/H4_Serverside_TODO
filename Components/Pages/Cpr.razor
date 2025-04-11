@@ -1,0 +1,131 @@
+﻿@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Http
+@using TodoApp.Data
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager NavigationManager
+@inject TodoDbContext DbContext
+@using TodoApp.Services
+@inject CprValidationService CprValidationService
+@inject EncryptionService EncryptionService
+
+@page "/cpr"
+
+@attribute [Authorize(Policy = "RequireAuthenticatedUser")]
+
+<AuthorizeView>
+    <Authorized>
+        <h3>CPR Validering:</h3>
+        <p>You are logged in as: @UserName</p>
+
+        @if (CprValidationService.IsCprValidated)
+        {
+            <p>CPR is already confirmed for this session.</p>
+        }
+        else if (HasCpr)
+        {
+            <div class="mb-3">
+                <label for="cprInput" class="form-label">Enter CPR</label>
+                <input type="text" id="cprInput" @bind="CprInput" class="form-control" placeholder="Enter your CPR" />
+                <button class="btn btn-primary mt-2" @onclick="ConfirmCprAsync">Bekræft CPR</button>
+                <p class="text-danger">@ErrorMessage</p>
+            </div>
+        }
+        else
+        {
+            <div class="mb-3">
+                <label for="cprInput" class="form-label">Enter CPR</label>
+                <input type="text" id="cprInput" @bind="CprInput" class="form-control" placeholder="Enter your CPR" />
+            </div>
+            <div class="mb-3">
+                <label for="confirmCprInput" class="form-label">Confirm CPR</label>
+                <input type="text" id="confirmCprInput" @bind="ConfirmCprInput" class="form-control" placeholder="Confirm your CPR" />
+            </div>
+            <button class="btn btn-primary mt-2" @onclick="AddCprAsync">Tilføj CPR</button>
+            <p class="text-danger">@ErrorMessage</p>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <p>Log ind for at få adgang til denne side</p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string? CprInput;
+    private string? ConfirmCprInput;
+    private bool HasCpr;
+    private string? ErrorMessage;
+    private string? UserName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get the logged-in user's name
+        UserName = HttpContextAccessor.HttpContext?.User.Identity?.Name;
+
+        if (!string.IsNullOrWhiteSpace(UserName))
+        {
+            var cprEntry = await DbContext.Cprs.FirstOrDefaultAsync(c => c.User == UserName);
+            HasCpr = cprEntry is not null;
+        }
+    }
+
+    private async Task AddCprAsync()
+    {
+        ErrorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(CprInput) || string.IsNullOrWhiteSpace(ConfirmCprInput))
+        {
+            ErrorMessage = "CPR fields cannot be empty.";
+            return;
+        }
+
+        if (CprInput != ConfirmCprInput)
+        {
+            ErrorMessage = "CPR numbers do not match.";
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(UserName))
+        {
+            var hashedCpr = EncryptionService.HashWithBCrypt(CprInput);
+
+            var cprEntry = new TodoApp.Data.Cpr
+                {
+                    User = UserName,
+                    CprNr = hashedCpr
+                };
+
+            DbContext.Cprs.Add(cprEntry);
+            await DbContext.SaveChangesAsync();
+
+            HasCpr = true;
+            CprInput = null;
+            ConfirmCprInput = null;
+        }
+    }
+
+    private async Task ConfirmCprAsync()
+    {
+        ErrorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(CprInput))
+        {
+            ErrorMessage = "CPR field cannot be empty.";
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(UserName))
+        {
+            var cprEntry = await DbContext.Cprs.FirstOrDefaultAsync(c => c.User == UserName);
+            if (cprEntry is not null && EncryptionService.VerifyBCryptHash(CprInput, cprEntry.CprNr))
+            {
+                CprValidationService.IsCprValidated = true;
+                NavigationManager.NavigateTo("todo");
+            }
+            else
+            {
+                ErrorMessage = "CPR does not match.";
+            }
+        }
+    }
+}

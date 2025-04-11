@@ -1,0 +1,167 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@using TodoApp.Data
+@inject RoleManager<IdentityRole> RoleManager
+@inject UserManager<ApplicationUser> UserManager
+
+@page "/roles"
+
+@attribute [Authorize(Policy = "RequireAuthenticatedUser")]
+
+<AuthorizeView>
+    <Authorized>
+        <h3>Rollehåndtering</h3>
+
+        <div class="mb-3">
+            <label for="newRole" class="form-label">Add New Role</label>
+            <input type="text" id="newRole" @bind="NewRoleName" class="form-control" placeholder="Enter role name" />
+            <button class="btn btn-primary mt-2" @onclick="AddRoleAsync">Add New Role</button>
+            <p class="text-success" style="display: @(SuccessMessage is not null ? "block" : "none")">@SuccessMessage</p>
+            <p class="text-danger" style="display: @(ErrorMessage is not null ? "block" : "none")">@ErrorMessage</p>
+        </div>
+
+        @if (RoleList.Any())
+        {
+            <div class="mb-3">
+                <label for="existingRoles" class="form-label">Remove Role</label>
+                <select id="existingRoles" @bind="SelectedRole" @bind:event="onchange" class="form-select">
+                    <option value="">-- Select a role to remove --</option>
+                    @foreach (var role in RoleList)
+                    {
+                        <option value="@role.Name">@role.Name</option>
+                    }
+                </select>
+                <button class="btn btn-danger mt-2" @onclick="RemoveRoleAsync">Remove Selected Role</button>
+            </div>
+
+            @if (UsersWithRole.Any())
+            {
+                <div class="mt-3">
+                    <h5>Users with the role '@SelectedRole':</h5>
+                    <ul>
+                        @foreach (var user in UsersWithRole)
+                        {
+                            <li>@user.Email (@user.UserName)</li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+        else
+        {
+            <p>No roles available to remove.</p>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <p>Please log in to access this page.</p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string? NewRoleName;
+    private string? SelectedRole;
+    private List<IdentityRole> RoleList = new();
+    private List<ApplicationUser> UsersWithRole = new();
+    private string? SuccessMessage;
+    private string? ErrorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRolesAsync();
+    }
+
+    private async Task LoadRolesAsync()
+    {
+        RoleList = await RoleManager.Roles.ToListAsync();
+    }
+
+    private async Task LoadUsersForRoleAsync(ChangeEventArgs e)
+    {
+        SelectedRole = e.Value?.ToString();
+        UsersWithRole.Clear();
+
+        if (!string.IsNullOrWhiteSpace(SelectedRole))
+        {
+            var users = await UserManager.Users.ToListAsync();
+            foreach (var user in users)
+            {
+                if (await UserManager.IsInRoleAsync(user, SelectedRole))
+                {
+                    UsersWithRole.Add(user);
+                }
+            }
+        }
+    }
+
+    private async Task AddRoleAsync()
+    {
+        SuccessMessage = null;
+        ErrorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(NewRoleName))
+        {
+            ErrorMessage = "Role name cannot be empty.";
+            return;
+        }
+
+        if (await RoleManager.RoleExistsAsync(NewRoleName))
+        {
+            ErrorMessage = "Role already exists.";
+            return;
+        }
+
+        var result = await RoleManager.CreateAsync(new IdentityRole(NewRoleName));
+        if (result.Succeeded)
+        {
+            SuccessMessage = $"Role '{NewRoleName}' added successfully.";
+            NewRoleName = string.Empty;
+            await LoadRolesAsync();
+        }
+        else
+        {
+            ErrorMessage = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
+        }
+    }
+
+    private async Task RemoveRoleAsync()
+    {
+        SuccessMessage = null;
+        ErrorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(SelectedRole))
+        {
+            ErrorMessage = "Please select a role to remove.";
+            return;
+        }
+
+        var role = await RoleManager.FindByNameAsync(SelectedRole);
+        if (role is null)
+        {
+            ErrorMessage = "Role not found.";
+            return;
+        }
+
+        var users = await UserManager.Users.ToListAsync();
+        foreach (var user in users)
+        {
+            if (await UserManager.IsInRoleAsync(user, SelectedRole))
+            {
+                await UserManager.RemoveFromRoleAsync(user, SelectedRole);
+            }
+        }
+
+        var result = await RoleManager.DeleteAsync(role);
+        if (result.Succeeded)
+        {
+            SuccessMessage = $"Role '{SelectedRole}' removed successfully.";
+            SelectedRole = null;
+            UsersWithRole.Clear();
+            await LoadRolesAsync();
+        }
+        else
+        {
+            ErrorMessage = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
+        }
+    }
+}
